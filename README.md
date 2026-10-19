@@ -23,12 +23,14 @@ The blast-radius query follows incoming dependency paths:
 
 ```cypher
 MATCH path = (dependent:Service)-[:DEPENDS_ON*1..4]->(target:Service {name: $service})
-RETURN DISTINCT dependent.name, length(path), [n IN nodes(path) | n.name]
+RETURN DISTINCT dependent.name AS service, length(path) AS hops,
+       [n IN nodes(path) | n.name] AS via
+ORDER BY hops, service
 ```
 
 The query uses a supported fixed maximum of four hops; the CLI validates the requested depth from 1 to 4 and filters results to that depth. Other investigation values, including service names, are passed as query parameters. The ownership, deployment, and alert/metric tools use their explicit graph relationships rather than guessing context from the incident text.
 
-Rows returned from FalkorDB are reported as **confirmed graph facts**: they confirm that the current graph contains those records and relationships. A recent deployment or coincident alert/metric is only a **possible cause**. CloudSentry does not prove causation, and it lists missing evidence when expected records are absent.
+Rows returned from FalkorDB are reported as **graph facts**: they show what records and relationships are present in the current graph, not whether that data is complete, current, or independently verified. A recent deployment or coincident alert/metric is only a **possible cause**. CloudSentry does not prove causation, and it lists missing evidence when expected records are absent.
 
 ## Architecture
 
@@ -107,20 +109,16 @@ $env:FALKORDB_GRAPH = "track1_demo"
 From the project directory:
 
 ```powershell
-# Merge the synthetic dataset; safe to repeat and does not delete graph data.
 py .\app.py --seed-only
 
-# Run the offline unit tests and the live integration test.
 py -m unittest -v
 
-# Seed, then investigate payments-api with a three-hop blast-radius limit.
 py .\app.py --seed --service payments-api --depth 3 --incident "Service payments-api is returning HTTP 500 errors. Investigate the impact and identify the likely cause and responsible team."
 
-# Optional structured JSON output.
 py .\app.py --service payments-api --depth 3 --json
 ```
 
-The test suite uses the built-in `unittest` framework. Its integration test connects to FalkorDB, checks report evidence, verifies that repeat seeding does not change seeded counts, and confirms an unrelated test node survives seeding. No `pytest` dependency is required.
+The test suite uses the built-in `unittest` framework. Offline tests use a fake graph; the integration test connects to FalkorDB, checks report evidence, verifies that repeat seeding does not change seeded counts, and confirms an unrelated test node survives seeding. The integration test is skipped if FalkorDB is unavailable. No `pytest` dependency is required.
 
 ## Example Report
 
@@ -156,3 +154,7 @@ For example, the `checkout-web -> payments-api` path is a graph-backed dependenc
 - Relationship and event coverage is limited to the seeded graph. The current alert lookup is service-based, not incident-ID-based.
 - The report cannot establish causation. It recommends checking the deployment/error timeline, logs, traces, and the owning team's assessment.
 - Useful follow-up work would be expanding the graph with real-but-safe demo fixtures, querying alerts by incident identity, and adding tests for more graph shapes.
+
+## AI Assistance
+
+GitHub Copilot was used to help debug this project.  AI assistance is a development tool only; CloudSentry does not call an LLM at runtime.
